@@ -1,25 +1,31 @@
 # pvf
 详细注释请参考文件。
 # 使用方法
-打开文件并初始化PVF对象，排序显示到ListView中：
+很简单：
+``` C#
+        var pvf = new Pvf(pvfFilename);//初始化pvf文件，进行读取操作
+        string fileContent = pvf.getPvfFileByPath("equipment/equipment.lst", Encoding.UTF8);
+        pvf.dispose();//不用了就释放掉
+```
+打开文件并初始化PVF对象，排序显示到TreeView中：
 ``` C#
         private void 打开ToolStripMenuItem_Click(object sender, EventArgs e)
         {
             OpenFileDialog fileDialog = new OpenFileDialog();
             fileDialog.Multiselect = false;
             fileDialog.Title = "请选择文件";
-            fileDialog.Filter = "Script.pvf文件(*.pvf)|*.pvf"; //设置要选择的文件的类型
+            fileDialog.Filter = "Script.pvf文件(*.pvf)|*.pvf";
             if (fileDialog.ShowDialog() == DialogResult.OK)
             {
-                pvfFilename = fileDialog.FileName;//返回文件的完整路径
+                pvfFilename = fileDialog.FileName;
                 Thread th = new Thread(loadPvfThread);
                 th.Start();
-                //pvf.getPvfFileByPath("equipment/equipment.lst", Encoding.GetEncoding("big5"));
+                //pvf.getPvfFileByPath("equipment/equipment.lst", Encoding.UTF8);
             }
         }
         private void loadPvfThread()
         {
-            pvf = new Pvf(pvfFilename);
+            pvf = new Pvf(pvfFilename);//正常使用只需要这一个就行了，关闭窗体的时候记得dispose()
             TreeNode root = new TreeNode();
             foreach (string dom in pvf.headerTreeCache.Keys)
                 dfsCreateNode(pvf.headerTreeCache[dom], ref root, dom.Split('/'), 0);
