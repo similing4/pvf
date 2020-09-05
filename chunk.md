@@ -1,3 +1,5 @@
+任何未加密的PVF二进制文件chunk格式均为如下
+```c
 int uuidLength; //UUID长度
 char[uuidLength] uuid; //UUID
 int fileVersion; //pvf文件版本
@@ -6,20 +8,55 @@ int dirTreeCrc32; //文件树解密CRC32
 int headerFilesCount; //文件树包含的文件数
 byte[dirTreeLength] unpackedHeaderTree; //加密后的文件树
 byte[] filePack; //文件chunk，由文件树提供偏移量
+```
+加解密算法如下：
 
 解密：将0x81A79011与CRC32(这里是dirTreeCrc32)进行异或，而后逐4字节读取待解密块（这里是unpackedHeaderTree）并对其进行异或，并将后六位提到最开头以此解密。
-加密：将0x81A79011与CRC32进行异或获得秘钥A，而后逐4字节读取解密后的待加密块，将前6位放置到最后，而后将处理过后的待加密块与秘钥A进行异或即可得到加密块。
 
+示例:
+```C#
+void unpackHeaderTree(ref byte[] byteArr, int fileLen, uint crc32) {
+	uint key = 2175242257;// 1000 0001 1010 0111 1001 0000 0001 0001，即0x81A79011
+	//传入CRC范例：0110 1111 1111 0100 1010 1101 1000 0001
+	int index = 0; //当前下标
+	while (index < fileLen) { //逐4字节遍历所有字节
+		int num = BitConverter.ToUInt32(byteArr, index) ^ key ^ crc32; //将读取的4字节int数与key^CRC进行异或运算。因为异或运算有交换律所以位置随意。
+		Array.Copy(BitConverter.GetBytes(num >> 6 | num << 32 - 6), 0, byteArr, index, 4); //将异或运算得到的int数的二进制后六位放到前面，前面26位放到后面，然后把解密后的数据塞到原位置。
+                index += 4;//后移四位解密后面四位
+	}
+}
+```
+
+加密：由于异或有自反性，也就是A^B^B == A，所以对上述解密内容进行逆运算即可进行加密。
+将0x81A79011与CRC32进行异或获得秘钥A，而后逐4字节读取解密后的待加密块，将前6位放置到最后，而后将处理过后的待加密块与秘钥A进行异或即可得到加密块。
+
+示例：
+```C#
+void packHeaderTree(ref byte[] byteArr, int fileLen, uint crc32) {
+	uint key = 2175242257;// 1000 0001 1010 0111 1001 0000 0001 0001，即0x81A79011
+	//传入CRC范例：0110 1111 1111 0100 1010 1101 1000 0001
+	int index = 0; //当前下标
+	while (index < fileLen) { //逐4字节遍历所有字节
+		int num = BitConverter.ToUInt32(byteArr, index); //读取
+		num = num >> 32 - 6 | num << 6; //将解密对应的位置返还回来
+		num = num ^ key ^ crc32; //将这4字节int数与key^CRC进行异或运算，由其自反性可获得源加密字符串。
+		Array.Copy(BitConverter.GetBytes(num), 0, byteArr, index, 4); //把加密后的数据塞到原位置。
+                index += 4;//后移四位加密后面四位
+	}
+}
+```
 
 unpackedHeaderTree 解密后的数据为连续存放的文件树，结构如下：
-struct HeaderTree{
+```c
+struct{
 	int fileNumber; //文件编号
 	int filePathLength; //文件完整路径长度
 	byte[filePathLength] filePath; //文件完整路径 需要使用CP949（韩语）编码进行解码得到路径字符串，其路径以\为路径分隔符，。
 	int fileLength; //文件字节数大小
 	int fileCrc32; //文件解密CRC32
 	int relativeOffset; //该文件相对filePack——文件chunk的偏移
-}
+}HeaderTree[];
+```
 
 文件chunk解密方法与文件树解密方法一致，不过CRC32秘钥换成了fileCrc32，被解密的文件chunk长度应当为4的倍数(fileLength + 3) & 0xFFFFFFFC
 解密后最后多出来的几位应置为0
