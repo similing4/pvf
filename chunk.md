@@ -332,38 +332,64 @@ struct{
 对这个文件chunk使用《2.文件解密算法》解密后获得的解密文件chunk的数据结构如下：
 前2位字节固定为b0d0。
 字节从第三位开始，会按照1个字节，一个Int数如此的顺序放置。也就是这个字节相对解密后的chunk的偏移为2,7,12,17以此类推。
+其中那一个字节是标明后面的Int数据位(下称数据位)的类型的标志位。这个标志位意义如下：
+```c#
+enum ScriptType
+{
+	Int = 2, //数据位是Int的二进制表示
+	IntEx = 3, //数据位是Int的二进制表示
+	Float = 4, //数据位是单精度浮点数的二进制表示
+	Section = 5, //数据位是stringtable.bin中文本下标（Int）的二进制表示
+	Command = 6, //数据位是stringtable.bin中文本下标（Int）的二进制表示
+	String = 7, //数据位是stringtable.bin中文本下标（Int）的二进制表示
+	CommandSeparator = 8, //数据位是stringtable.bin中文本下标（Int）的二进制表示
+	StringLinkIndex = 9, //数据位是n_string.lst中的文件名（文本）下标（Int）的二进制表示。表意时应取下一个标志位的数据（StringLink类型）作为取出文件名对应的lst文件的字符串下标
+	StringLink = 10 //详见StringLinkIndex
+}
+```
+
 我们假定一些变量：
-定义这个字节为currentByte
-定义这个字节前面的int数为bef
-定义这个字节后面的int数为aft
-定义StringTable表的第aft个字符串为str
-定义《5.N_String.LST》的nStringList为nStringObjectList
-这个字节对应不同值有不同含义。分别对应pvf文件中的如下语句：
+
+定义标志位为currentByte
+
+定义当前标志位的数据位为currentData
+
+定义下一个标志位的数据位为afterData
+
+定义stringtable.bin表的第n个字符串为stringtable\[n\]
+
+定义n_string.lst表的第n个字符串为nStringObjectList\[n\]
 
 *无论什么文件，都先来一个《#PVF_File\n》
 
-## 6.1.当字节为0xA时追加以下内容：
+## 6.1.当标志位为2(Int)时追加以下内容：
 ```
-"<" + bef + "::" + (str) + "`" + (在nStringObjectList[bef].nStringKeyValPairList中搜索键为str的值) +"`>\r\n"
+currentData + "\t"
 ```
-## 6.2.当字节为0x7时追加以下内容：
+## 6.2.当标志位为3(IntEx)时追加以下内容：
 ```
-"`" + str + "`\r\n"
+"{" + currentByte, "=`" + currentData + "`}
 ```
-## 6.3.当字节为0x5时追加以下内容：
+## 6.3.当标志位为4(Float)时追加以下内容：
 ```
-"\r\n", str, "\r\n"
+读取currentData的四位字节为32位单精度浮点数（显示时保留6位小数） + "\t"
 ```
-## 6.4.当字节为0x2时追加以下内容：
+## 6.4.当标志位为5(Section)时追加以下内容：
 ```
-aft + "\t"
+"\r\n", stringtable[currentData], "\r\n"
 ```
-## 6.5.当字节为0x4时追加以下内容：
+## 6.5.当标志位为6(Command)或8(CommandSeparator)时追加以下内容：
 ```
-读取aft的四位字节为32位单精度浮点数（显示时保留6位小数） + "\t"
+"{" + currentByte, "=`" + stringtable[currentData] + "`}\r\n"
 ```
-## 6.6.当字节为0x6或0x8时追加以下内容：
+## 6.6.当标志位为7(String)时追加以下内容：
 ```
-"{" + currentByte, "=`" + str + "`}\r\n"
+"`" + stringtable[currentData] + "`\r\n"
 ```
+## 6.7.当标志位为9(StringLinkIndex)时追加以下内容：
+```
+"<" + currentByte + "::" + (stringtable[afterData]) + "`" + (nStringObjectList[currentData].nStringKeyValPairList[stringtable[afterData]]) +"`>\r\n"
+```
+## 6.8.当标志位为10(StringLink)时不做任何处理（因为6.7处理完了）
 
+上述写法只是为了方便逆向存储，也是通用的pvf解析规则。
