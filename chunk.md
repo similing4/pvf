@@ -368,7 +368,7 @@ currentData + "\t"
 ```
 ## 6.2.当标志位为3(IntEx)时追加以下内容：
 ```
-"{" + currentByte, "=`" + currentData + "`}
+"{" + currentByte, "=`" + currentData + "`} + "\t"
 ```
 ## 6.3.当标志位为4(Float)时追加以下内容：
 ```
